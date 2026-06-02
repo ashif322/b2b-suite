@@ -41,16 +41,15 @@ class CartController extends BaseCartController
                     continue;
                 }
 
-                $negotiation = $this->customerQuoteItemRepository
-                    ->join('customer_quotes', 'customer_quotes.id', '=', 'customer_quote_items.customer_quote_id')
-                    ->where('customer_quote_items.product_id', $cartItem->product_id)
-                    ->where('customer_quotes.status', 'accepted')
-                    ->select('customer_quote_items.*')
-                    ->first();
+                $additional = $cartItem->additional;
 
-                if ($negotiation) {
-                    if ($quantity != $negotiation->negotiated_qty) {
+                if (isset($additional['quote_id']) && isset($additional['quote_item_id'])) {
+                    $negotiation = $this->customerQuoteItemRepository
+                        ->where('id', $additional['quote_item_id'])
+                        ->where('customer_quote_id', $additional['quote_id'])
+                        ->first();
 
+                    if ($negotiation && $quantity != $negotiation->negotiated_qty) {
                         return new JsonResource([
                             'message' => trans('b2b_suite::app.shop.checkout.cart.cannot-change-negotiated-quantity'),
                         ]);
