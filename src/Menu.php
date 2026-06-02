@@ -166,4 +166,36 @@ class Menu extends BaseMenu
 
         $this->removeChildrenUnauthorizedMenuItem($firstChild);
     }
+
+    /**
+     * Get current active menu.
+     */
+    public function getCurrentActiveMenu(?string $area = null): ?MenuItem
+    {
+        $currentKey = implode('.', array_slice(explode('.', $this->currentKey), 0, 2));
+
+        return $this->findMatchingItem($this->getItems($area), $currentKey);
+    }
+
+    /**
+     * Finding the matching item.
+     */
+    private function findMatchingItem($items, $currentKey): ?MenuItem
+    {
+        foreach ($items as $item) {
+            if ($item->key == $currentKey) {
+                return $item;
+            }
+
+            if ($item->haveChildren()) {
+                $matchingChild = $this->findMatchingItem($item->getChildren(), $currentKey);
+
+                if ($matchingChild) {
+                    return $matchingChild;
+                }
+            }
+        }
+
+        return null;
+    }
 }
