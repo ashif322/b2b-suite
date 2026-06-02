@@ -43,6 +43,17 @@ class Menu extends BaseMenu
                 break;
 
             case self::CUSTOMER:
+                $customer = auth()->guard('customer')->user();
+
+                $b2bKeys = [
+                    'account.requisitions',
+                    'account.quotes',
+                    'account.purchase_orders',
+                    'account.quick_orders',
+                    'account.users',
+                    'account.roles',
+                ];
+
                 $canShowWishlist = ! (bool) core()->getConfigData('customer.settings.wishlist.wishlist_option');
                 $canShowGdpr = ! (bool) core()->getConfigData('general.gdpr.settings.enabled');
 
@@ -50,11 +61,14 @@ class Menu extends BaseMenu
                     ->reject(fn ($item) => ($item['key'] == 'account.wishlist' && $canShowWishlist) ||
                         ($item['key'] == 'account.gdpr_data_request' && $canShowGdpr)
                     )
-                    ->filter(function ($item) {
+                    ->filter(function ($item) use ($customer, $b2bKeys) {
                         $key = $item['key'];
-                        $hasPermission = customer_bouncer()->hasPermission($key);
 
-                        return $hasPermission;
+                        if (! $customer?->company_role_id && $customer?->type !== 'company') {
+                            return ! in_array($key, $b2bKeys);
+                        }
+
+                        return customer_bouncer()->hasPermission($key);
                     })
                     ->toArray();
 
