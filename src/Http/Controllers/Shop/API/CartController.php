@@ -3,6 +3,7 @@
 namespace Webkul\B2BSuite\Http\Controllers\Shop\API;
 
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Http\Response;
 use Webkul\B2BSuite\Repositories\CustomerQuoteItemRepository;
 use Webkul\CartRule\Repositories\CartRuleCouponRepository;
 use Webkul\Checkout\Facades\Cart;
@@ -22,6 +23,64 @@ class CartController extends BaseCartController
         parent::__construct(app(ProductRepository::class), app(CartRuleCouponRepository::class));
 
         $this->customerQuoteItemRepository = $customerQuoteItemRepository;
+    }
+
+    /**
+     * Store items in cart - Override to prevent adding negotiated products when already in cart.
+     */
+    public function store(): JsonResource
+    {
+        $this->validate(request(), [
+            'product_id' => 'required|integer|exists:products,id',
+            'is_buy_now' => 'integer|in:0,1',
+            'quantity'   => 'integer|min:1',
+        ]);
+
+        $product = $this->productRepository->with('parent')->findOrFail(request()->input('product_id'));
+
+        try {
+            if (! $product->status) {
+                throw new \Exception(trans('shop::app.checkout.cart.inactive-add'));
+            }
+
+            $customerId = auth()->guard('customer')->user()->id;
+            $requestedQty = request()->input('quantity', 1);
+            $cart = Cart::getCart();
+
+            if ($cart && $cart->items->count() > 0) {
+                $existingCartItem = $cart->items->where('product_id', $product->id)->first();
+
+                if ($existingCartItem) {
+                    $existingAdditional = $existingCartItem->additional ?? [];
+
+                    if (isset($existingAdditional['quote_id'])) {
+                        return new JsonResource([
+                            'message' => trans('b2b_suite::app.shop.checkout.cart.cannot-add-product-with-negotiated-price'),
+                        ], Response::HTTP_BAD_REQUEST);
+                    }
+                }
+            }
+
+            $response = [];
+
+            if (request()->get('is_buy_now')) {
+                Cart::deActivateCart();
+
+                $response['redirect'] = route('shop.checkout.onepage.index');
+            }
+
+            $cart = Cart::addProduct($product, request()->all());
+
+            return new JsonResource(array_merge([
+                'data'    => new CartResource($cart),
+                'message' => trans('shop::app.checkout.cart.item-add-to-cart'),
+            ], $response));
+        } catch (\Exception $exception) {
+            return response()->json([
+                'redirect_uri' => route('shop.product_or_category.index', $product->url_key),
+                'message'      => $exception->getMessage(),
+            ], Response::HTTP_BAD_REQUEST);
+        }
     }
 
     /**
